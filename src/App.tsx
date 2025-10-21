@@ -9,7 +9,7 @@ export default function HomeRunDerby() {
     if (type === 'hr') {
       try {
         // Try to play MP3 file first
-        const audio = new Audio('/Sounds/homerun.mp3');
+        const audio = new Audio('/Sounds/woo-hoo-82843.mp3');
         audio.volume = 0.7;
         audio.play().catch(error => {
           // If MP3 fails, play fallback generated sound
