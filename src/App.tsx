@@ -10,57 +10,67 @@ export default function HomeRunDerby() {
       console.log('Attempting to play home run sound...');
       
       try {
-        // Try to play MP3 file first
-        const audio = new Audio('/Sounds/woo-hoo-82843.mp3');
-        audio.volume = 0.8;
-        audio.preload = 'auto';
+        // Try to play MP3 file first - test multiple paths
+        const audioPaths = [
+          '/Sounds/woo-hoo-82843.mp3',
+          './Sounds/woo-hoo-82843.mp3',
+          'Sounds/woo-hoo-82843.mp3'
+        ];
         
-        // Add event listeners for debugging
-        audio.addEventListener('loadstart', () => {
-          console.log('Audio loading started');
-        });
+        let audio = null;
+        let lastError = null;
         
-        audio.addEventListener('loadeddata', () => {
-          console.log('Audio data loaded');
-        });
-        
-        audio.addEventListener('canplay', () => {
-          console.log('Audio can play');
-        });
-        
-        audio.addEventListener('canplaythrough', () => {
-          console.log('Audio can play through');
-        });
-        
-        audio.addEventListener('error', (e) => {
-          console.log('Audio error:', e);
-          console.log('Error details:', audio.error);
-          playFallbackSound();
-        });
-        
-        audio.addEventListener('play', () => {
-          console.log('Audio started playing');
-        });
-        
-        audio.addEventListener('ended', () => {
-          console.log('Audio finished playing');
-        });
-        
-        const playPromise = audio.play();
-        
-        if (playPromise !== undefined) {
-          playPromise.then(() => {
-            console.log('Audio played successfully');
-          }).catch(error => {
-            console.log('MP3 play failed, using fallback:', error);
-            console.log('Error name:', error.name);
-            console.log('Error message:', error.message);
-            playFallbackSound();
-          });
-        } else {
-          console.log('Play promise is undefined, trying fallback');
-          playFallbackSound();
+        for (const path of audioPaths) {
+          try {
+            console.log(`Trying audio path: ${path}`);
+            audio = new Audio(path);
+            audio.volume = 0.8;
+            audio.preload = 'auto';
+            
+            // Test if the audio can load
+            audio.addEventListener('error', (e) => {
+              console.log(`Audio error for path ${path}:`, e);
+              console.log('Error details:', audio.error);
+              lastError = e;
+            });
+            
+            audio.addEventListener('canplay', () => {
+              console.log(`Audio can play from path: ${path}`);
+            });
+            
+            audio.addEventListener('play', () => {
+              console.log(`Audio started playing from path: ${path}`);
+            });
+            
+            // Try to play
+            const playPromise = audio.play();
+            
+            if (playPromise !== undefined) {
+              playPromise.then(() => {
+                console.log(`Audio played successfully from path: ${path}`);
+                return; // Success, exit the loop
+              }).catch(error => {
+                console.log(`MP3 play failed for path ${path}:`, error);
+                lastError = error;
+              });
+            }
+            
+            // If we get here without error, the audio loaded successfully
+            if (!lastError) {
+              console.log(`Successfully loaded audio from: ${path}`);
+              return;
+            }
+            
+          } catch (error) {
+            console.log(`Failed to create audio for path ${path}:`, error);
+            lastError = error;
+          }
         }
+        
+        // If all paths failed, use fallback
+        console.log('All MP3 paths failed, using fallback sound');
+        playFallbackSound();
+        
       } catch (error) {
         // If audio creation fails, use fallback
         console.log('Audio creation failed, using fallback:', error);
@@ -360,7 +370,22 @@ export default function HomeRunDerby() {
             <button onClick={undo} disabled={!history.length} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: history.length ? 'pointer' : 'not-allowed', fontSize: '0.9rem'}}>Undo</button>
             <button onClick={share} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Share</button>
             <button onClick={reset} style={{padding: '8px 12px', backgroundColor: '#dc2626', color: '#fff', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Reset</button>
-            <button onClick={async () => { await enableAudio(); playSound('hr'); }} style={{padding: '8px 12px', backgroundColor: '#059669', color: '#fff', border: '1px solid #059669', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>🔊 Test Sound</button>
+            <button onClick={async () => { 
+              await enableAudio(); 
+              // Test if MP3 file is accessible
+              try {
+                const response = await fetch('/Sounds/woo-hoo-82843.mp3');
+                console.log('MP3 fetch response:', response.status, response.statusText);
+                if (response.ok) {
+                  console.log('MP3 file is accessible via fetch');
+                } else {
+                  console.log('MP3 file not accessible via fetch');
+                }
+              } catch (error) {
+                console.log('MP3 fetch error:', error);
+              }
+              playSound('hr'); 
+            }} style={{padding: '8px 12px', backgroundColor: '#059669', color: '#fff', border: '1px solid #059669', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>🔊 Test Sound</button>
           </div>
           {!audioEnabled && (
             <div style={{color: '#f59e0b', fontSize: '0.8rem', textAlign: 'center', marginTop: '5px'}}>
