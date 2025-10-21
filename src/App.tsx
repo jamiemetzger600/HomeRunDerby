@@ -80,7 +80,7 @@ export default function HomeRunDerby() {
     // No sound for misses - silence
   };
 
-  // Fallback sound using Web Audio API
+  // Fallback sound using Web Audio API - Enhanced "woo-hoo" sound
   const playFallbackSound = () => {
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -90,33 +90,46 @@ export default function HomeRunDerby() {
         audioContext.resume();
       }
       
-      // Create a more realistic crowd cheer sound
+      // Create a more realistic "woo-hoo" crowd cheer sound
       const oscillator1 = audioContext.createOscillator();
       const oscillator2 = audioContext.createOscillator();
+      const oscillator3 = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       
       oscillator1.connect(gainNode);
       oscillator2.connect(gainNode);
+      oscillator3.connect(gainNode);
       gainNode.connect(audioContext.destination);
       
-      // Create a "woo-hoo" like sound with two oscillators
-      oscillator1.frequency.setValueAtTime(400, audioContext.currentTime);
-      oscillator1.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.3);
+      // First "woo" - lower frequency rising
+      oscillator1.frequency.setValueAtTime(300, audioContext.currentTime);
+      oscillator1.frequency.exponentialRampToValueAtTime(500, audioContext.currentTime + 0.4);
       oscillator1.type = 'sine';
       
-      oscillator2.frequency.setValueAtTime(600, audioContext.currentTime);
-      oscillator2.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.3);
+      // Second "hoo" - higher frequency rising
+      oscillator2.frequency.setValueAtTime(500, audioContext.currentTime + 0.2);
+      oscillator2.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.6);
       oscillator2.type = 'triangle';
       
-      gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
+      // Harmonics for richness
+      oscillator3.frequency.setValueAtTime(600, audioContext.currentTime);
+      oscillator3.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.5);
+      oscillator3.type = 'sawtooth';
+      
+      // Envelope with proper fade in/out
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime + 0.4);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
       
       oscillator1.start(audioContext.currentTime);
-      oscillator2.start(audioContext.currentTime);
-      oscillator1.stop(audioContext.currentTime + 0.6);
-      oscillator2.stop(audioContext.currentTime + 0.6);
+      oscillator2.start(audioContext.currentTime + 0.2);
+      oscillator3.start(audioContext.currentTime);
+      oscillator1.stop(audioContext.currentTime + 0.8);
+      oscillator2.stop(audioContext.currentTime + 0.8);
+      oscillator3.stop(audioContext.currentTime + 0.8);
       
-      console.log('Fallback sound played');
+      console.log('Enhanced fallback "woo-hoo" sound played');
     } catch (error) {
       console.log('Fallback sound failed:', error);
     }

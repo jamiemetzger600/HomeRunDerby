@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate Woo-Hoo Sound</title>
+</head>
+<body>
+    <h1>Generate Woo-Hoo Sound</h1>
+    <button id="generateBtn">Generate and Download MP3</button>
+    <script>
+        function generateWooHooSound() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const sampleRate = 44100;
+            const duration = 1.0; // 1 second
+            const samples = Math.floor(sampleRate * duration);
+            
+            // Create audio buffer
+            const buffer = audioContext.createBuffer(1, samples, sampleRate);
+            const channelData = buffer.getChannelData(0);
+            
+            // Generate "woo-hoo" sound
+            for (let i = 0; i < samples; i++) {
+                const t = i / sampleRate;
+                
+                // Create a "woo-hoo" pattern with two tones
+                let sample = 0;
+                
+                // First "woo" (lower frequency)
+                if (t < 0.3) {
+                    const freq1 = 400 + (t * 200); // Rising frequency
+                    sample += 0.3 * Math.sin(2 * Math.PI * freq1 * t);
+                }
+                
+                // Second "hoo" (higher frequency)
+                if (t >= 0.3 && t < 0.7) {
+                    const freq2 = 600 + ((t - 0.3) * 300); // Rising frequency
+                    sample += 0.3 * Math.sin(2 * Math.PI * freq2 * t);
+                }
+                
+                // Add some harmonics for richness
+                if (t < 0.7) {
+                    sample += 0.1 * Math.sin(2 * Math.PI * 800 * t);
+                    sample += 0.05 * Math.sin(2 * Math.PI * 1200 * t);
+                }
+                
+                // Apply envelope (fade in/out)
+                let envelope = 1;
+                if (t < 0.1) envelope = t / 0.1; // Fade in
+                if (t > 0.6) envelope = (0.7 - t) / 0.1; // Fade out
+                
+                channelData[i] = sample * envelope;
+            }
+            
+            // Convert to WAV
+            const wavBuffer = audioBufferToWav(buffer);
+            
+            // Create download link
+            const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'woo-hoo-sound.wav';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        function audioBufferToWav(buffer) {
+            const length = buffer.length;
+            const arrayBuffer = new ArrayBuffer(44 + length * 2);
+            const view = new DataView(arrayBuffer);
+            
+            // WAV header
+            const writeString = (offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+            
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + length * 2, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, buffer.sampleRate, true);
+            view.setUint32(28, buffer.sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, 'data');
+            view.setUint32(40, length * 2, true);
+            
+            // Convert float samples to 16-bit PCM
+            const channelData = buffer.getChannelData(0);
+            let offset = 44;
+            for (let i = 0; i < length; i++) {
+                const sample = Math.max(-1, Math.min(1, channelData[i]));
+                view.setInt16(offset, sample * 0x7FFF, true);
+                offset += 2;
+            }
+            
+            return arrayBuffer;
+        }
+        
+        document.getElementById('generateBtn').addEventListener('click', generateWooHooSound);
+    </script>
+</body>
+</html>
