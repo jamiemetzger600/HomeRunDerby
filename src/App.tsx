@@ -137,9 +137,9 @@ export default function HomeRunDerby() {
       const main=[...p.main]; 
       main[idx]=nxt; 
       
-      // Play sound effect
-      if (nxt === 'hr') playSound('hr');
-      else if (nxt === 'x') playSound('miss');
+      // Play sound effect only when going from empty to a result
+      if (cur === '' && nxt === 'hr') playSound('hr');
+      else if (cur === '' && nxt === 'x') playSound('miss');
       
       return {...p, main}; 
     })); 
@@ -162,9 +162,9 @@ export default function HomeRunDerby() {
     const nextIndex = (currentIndex + 1) % order.length;
     const nextMark = order[nextIndex];
     
-    // Play sound effect
-    if (nextMark === 'hr') playSound('hr');
-    else if (nextMark === 'x') playSound('miss');
+    // Play sound effect only when going from empty to a result
+    if (currentPitch === '' && nextMark === 'hr') playSound('hr');
+    else if (currentPitch === '' && nextMark === 'x') playSound('miss');
     
     recordTb(id, tb.round, pitchIndex, nextMark);
   }
