@@ -137,7 +137,7 @@ export default function HomeRunDerby() {
     }
   }
 
-  function cycleMain(id:string, idx:number){ 
+  function cycleMain(id:string, idx:number, isDoubleClick:boolean = false){ 
     setPlayers(prev=>prev.map(p=>{ 
       if(p.id!==id) return p; 
       const order:Pitch[]=['','x','hr']; 
@@ -146,8 +146,8 @@ export default function HomeRunDerby() {
       const main=[...p.main]; 
       main[idx]=nxt; 
       
-      // Play sound effect only for home runs
-      if (cur === '' && nxt === 'hr') playSound('hr');
+      // Play sound effect only on double-click home runs
+      if (isDoubleClick && nxt === 'hr') playSound('hr');
       
       return {...p, main}; 
     })); 
@@ -158,7 +158,7 @@ export default function HomeRunDerby() {
 
   function recordTb(id:string, round:number, pitch:number, mark:Pitch){ setPlayers(prev=>prev.map(p=>{ if(p.id!==id) return p; const tb = p.tb.map(r=>[...r]); while(tb.length<=round) tb.push([]); const prevMark = tb[round][pitch]||''; tb[round][pitch]=mark; return {...p, tb}; })); setHistory(h=>[{op:'pitch', scope:'tb', id, round, pitch, mark}, ...h]); }
 
-  function recordLightning(pitchIndex:number){ 
+  function recordLightning(pitchIndex:number, isDoubleClick:boolean = false){ 
     if(!tb.active) return; 
     const id=tb.ids[tb.idx]; 
     const currentRoundPitches = players.find(p=>p.id===id)?.tb[tb.round] || [];
@@ -170,8 +170,8 @@ export default function HomeRunDerby() {
     const nextIndex = (currentIndex + 1) % order.length;
     const nextMark = order[nextIndex];
     
-    // Play sound effect only for home runs
-    if (currentPitch === '' && nextMark === 'hr') playSound('hr');
+    // Play sound effect only on double-click home runs
+    if (isDoubleClick && nextMark === 'hr') playSound('hr');
     
     recordTb(id, tb.round, pitchIndex, nextMark);
   }
@@ -352,7 +352,8 @@ export default function HomeRunDerby() {
                               <button 
                                 key={i} 
                                 onClick={()=>recordLightning(i)} 
-                                title={`Lightning Pitch ${i+1}`}
+                                onDoubleClick={()=>recordLightning(i, true)} 
+                                title={`Lightning Pitch ${i+1} - Double-click for home run sound`}
                                 style={{
                                   aspectRatio: '1',
                                   minHeight: '60px',
@@ -396,7 +397,8 @@ export default function HomeRunDerby() {
                             <button 
                               key={i} 
                               onClick={()=>!locked && !tb.active && !ended && cycleMain(p.id,i)} 
-                              title={`Pitch ${i+1}`}
+                              onDoubleClick={()=>!locked && !tb.active && !ended && cycleMain(p.id,i, true)} 
+                              title={`Pitch ${i+1} - Double-click for home run sound`}
                               style={{
                                 aspectRatio: '1',
                                 minHeight: '50px',
