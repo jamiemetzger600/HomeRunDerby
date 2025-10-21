@@ -4,6 +4,40 @@ export default function HomeRunDerby() {
   type Pitch = '' | 'x' | 'hr';
   type Player = { id: string; name: string; main: Pitch[]; tb: Pitch[][] };
 
+  // Sound effects using Web Audio API
+  const playSound = (type: 'hr' | 'miss') => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      if (type === 'hr') {
+        // Home run sound - ascending tone
+        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.3);
+        oscillator.type = 'sine';
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.3);
+      } else {
+        // Miss sound - descending tone
+        oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.2);
+        oscillator.type = 'sawtooth';
+        gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+      }
+    } catch (error) {
+      // Silently fail if audio context is not available
+    }
+  };
+
   const [players, setPlayers] = useState<Player[]>(() => {
     try { const raw = localStorage.getItem('hrd_players_v2'); return raw? JSON.parse(raw): []; } catch { return []; }
   });
@@ -12,21 +46,23 @@ export default function HomeRunDerby() {
   const [ended, setEnded] = useState<boolean>(() => { try { return JSON.parse(localStorage.getItem('hrd_ended_v2')||'false'); } catch { return false; } });
   const [history, setHistory] = useState<any[]>([]);
   const [tb, setTb] = useState<{active:boolean; ids:string[]; round:number; idx:number; pitch:number}>({active:false, ids:[], round:0, idx:0, pitch:0});
+  const [pitchCount, setPitchCount] = useState<number>(() => { try { return JSON.parse(localStorage.getItem('hrd_pitch_count_v2')||'6'); } catch { return 6; } });
 
   useEffect(()=>localStorage.setItem('hrd_players_v2', JSON.stringify(players)),[players]);
   useEffect(()=>localStorage.setItem('hrd_locked_v2', JSON.stringify(locked)),[locked]);
   useEffect(()=>localStorage.setItem('hrd_ended_v2', JSON.stringify(ended)),[ended]);
+  useEffect(()=>localStorage.setItem('hrd_pitch_count_v2', JSON.stringify(pitchCount)),[pitchCount]);
 
   const scores = useMemo(()=> new Map(players.map(p=>[p.id, (p.main.filter(m=>m==='hr').length + p.tb.flat().filter(m=>m==='hr').length)])),[players]);
   const maxHr = useMemo(()=> players.length? Math.max(...players.map(p=>scores.get(p.id) || 0)) : 0,[players, scores]);
   const leaders = useMemo(()=> players.filter(p=> (scores.get(p.id)||0)===maxHr && maxHr>0),[players, maxHr, scores]);
   const top3 = useMemo(()=> [...players].sort((a,b)=> (scores.get(b.id)||0) - (scores.get(a.id)||0) || a.name.localeCompare(b.name)).slice(0,3),[players, scores]);
 
-  const blank6 = () => Array.from({length:6},()=>'' as Pitch);
+  const blankPitches = () => Array.from({length:pitchCount},()=>'' as Pitch);
 
   function addPlayer(){
     const n = name.trim(); if(!n) return;
-    const p: Player = { id: crypto.randomUUID(), name: n, main: blank6(), tb: [] };
+    const p: Player = { id: crypto.randomUUID(), name: n, main: blankPitches(), tb: [] };
     setPlayers(v=>[...v, p]); setHistory(h=>[{op:'add', p}, ...h]); setName('');
   }
 
@@ -92,7 +128,23 @@ export default function HomeRunDerby() {
     }
   }
 
-  function cycleMain(id:string, idx:number){ setPlayers(prev=>prev.map(p=>{ if(p.id!==id) return p; const order:Pitch[]=['','x','hr']; const cur=p.main[idx]||''; const nxt=order[(order.indexOf(cur)+1)%order.length]; const main=[...p.main]; main[idx]=nxt; return {...p, main}; })); setHistory(h=>[{op:'pitch', scope:'main', id, idx}, ...h]); }
+  function cycleMain(id:string, idx:number){ 
+    setPlayers(prev=>prev.map(p=>{ 
+      if(p.id!==id) return p; 
+      const order:Pitch[]=['','x','hr']; 
+      const cur=p.main[idx]||''; 
+      const nxt=order[(order.indexOf(cur)+1)%order.length]; 
+      const main=[...p.main]; 
+      main[idx]=nxt; 
+      
+      // Play sound effect
+      if (nxt === 'hr') playSound('hr');
+      else if (nxt === 'x') playSound('miss');
+      
+      return {...p, main}; 
+    })); 
+    setHistory(h=>[{op:'pitch', scope:'main', id, idx}, ...h]); 
+  }
 
   function endMainRound(){ setLocked(true); const top=maxHr; const tied=players.filter(p=>(scores.get(p.id)||0)===top); if(tied.length>=2){ setEnded(false); setTb({active:true, ids:tied.map(t=>t.id), round:0, idx:0, pitch:0}); } else { setEnded(true); } }
 
@@ -109,6 +161,10 @@ export default function HomeRunDerby() {
     const currentIndex = order.indexOf(currentPitch);
     const nextIndex = (currentIndex + 1) % order.length;
     const nextMark = order[nextIndex];
+    
+    // Play sound effect
+    if (nextMark === 'hr') playSound('hr');
+    else if (nextMark === 'x') playSound('miss');
     
     recordTb(id, tb.round, pitchIndex, nextMark);
   }
@@ -171,19 +227,33 @@ export default function HomeRunDerby() {
 
 
   return (
-    <div style={{minHeight: '100vh', backgroundColor: '#1a1a1a', color: '#fff', padding: '20px', fontFamily: 'Arial, sans-serif'}}>
-      <div style={{maxWidth: '800px', margin: '0 auto'}}>
-        <header style={{marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-          <h1 style={{fontSize: '2rem', margin: 0}}>Home Run Derby</h1>
-          <div style={{display: 'flex', gap: '10px'}}>
-            <button onClick={undo} disabled={!history.length} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: history.length ? 'pointer' : 'not-allowed'}}>Undo</button>
-            <button onClick={share} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer'}}>Share</button>
-            <button onClick={reset} style={{padding: '8px 12px', backgroundColor: '#dc2626', color: '#fff', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer'}}>Reset</button>
+    <div style={{minHeight: '100vh', backgroundColor: '#1a1a1a', color: '#fff', padding: '10px', fontFamily: 'Arial, sans-serif'}}>
+      <div style={{maxWidth: '800px', margin: '0 auto', padding: '10px'}}>
+        <header style={{marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center'}}>
+          <h1 style={{fontSize: '1.8rem', margin: 0, textAlign: 'center'}}>Home Run Derby</h1>
+          <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center'}}>
+            <button onClick={undo} disabled={!history.length} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: history.length ? 'pointer' : 'not-allowed', fontSize: '0.9rem'}}>Undo</button>
+            <button onClick={share} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Share</button>
+            <button onClick={reset} style={{padding: '8px 12px', backgroundColor: '#dc2626', color: '#fff', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Reset</button>
           </div>
         </header>
 
         <div style={{backgroundColor: '#2a2a2a', border: '1px solid #444', borderRadius: '8px', padding: '20px', marginBottom: '20px'}}>
-          <h2 style={{marginTop: 0, marginBottom: '15px'}}>Add Players</h2>
+          <h2 style={{marginTop: 0, marginBottom: '15px'}}>Game Settings</h2>
+          <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '15px', alignItems: 'center'}}>
+            <label style={{color: '#fff', fontSize: '0.9rem'}}>Pitches per player:</label>
+            <select
+              value={pitchCount}
+              onChange={e=>setPitchCount(parseInt(e.target.value))}
+              disabled={locked}
+              style={{padding: '8px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px'}}
+            >
+              {[3,4,5,6,7,8,9,10].map(num => (
+                <option key={num} value={num}>{num}</option>
+              ))}
+            </select>
+          </div>
+          <h3 style={{marginTop: 0, marginBottom: '15px'}}>Add Players</h3>
           <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
             <input
               placeholder="Player name"
@@ -223,7 +293,7 @@ export default function HomeRunDerby() {
             ) : tb.active ? (
               <div style={{color: '#f59e0b', fontWeight: 'bold'}}>⚡ Lightning round {tb.round + 1} (3 pitches each)</div>
             ) : (
-              <div style={{color: '#999', fontSize: '0.9rem'}}>Mark each of 6 pitches: click to cycle ☐ → ✗ → HR</div>
+              <div style={{color: '#999', fontSize: '0.9rem'}}>Mark each of {pitchCount} pitches: click to cycle ☐ → ✗ → HR</div>
             )}
           </div>
           
@@ -272,21 +342,23 @@ export default function HomeRunDerby() {
                               const currentRoundPitches = p.tb[tb.round] || [];
                               const pitch = currentRoundPitches[i] || '';
                               return (
-                                <button 
-                                  key={i} 
-                                  onClick={()=>recordLightning(i)} 
-                                  title={`Lightning Pitch ${i+1}`}
-                                  style={{
-                                    aspectRatio: '1',
-                                    border: '1px solid #555',
-                                    borderRadius: '6px',
-                                    backgroundColor: pitch==='hr' ? '#047857' : pitch==='x' ? '#be123c' : '#444',
-                                    color: '#fff',
-                                    cursor: 'pointer',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 'bold'
-                                  }}
-                                >
+                              <button 
+                                key={i} 
+                                onClick={()=>recordLightning(i)} 
+                                title={`Lightning Pitch ${i+1}`}
+                                style={{
+                                  aspectRatio: '1',
+                                  minHeight: '60px',
+                                  border: '1px solid #555',
+                                  borderRadius: '6px',
+                                  backgroundColor: pitch==='hr' ? '#047857' : pitch==='x' ? '#be123c' : '#444',
+                                  color: '#fff',
+                                  cursor: 'pointer',
+                                  fontSize: '1rem',
+                                  fontWeight: 'bold',
+                                  touchAction: 'manipulation'
+                                }}
+                              >
                                   {pitch==='' ? '☐' : pitch==='x' ? '✗' : 'HR'}
                                 </button>
                               );
@@ -295,14 +367,16 @@ export default function HomeRunDerby() {
                           <button 
                             onClick={endLightningRound}
                             style={{
-                              padding: '8px 16px',
+                              padding: '12px 20px',
                               backgroundColor: '#f59e0b',
                               color: '#fff',
                               border: '1px solid #f59e0b',
-                              borderRadius: '4px',
+                              borderRadius: '6px',
                               cursor: 'pointer',
-                              fontSize: '0.8rem',
-                              fontWeight: 'bold'
+                              fontSize: '1rem',
+                              fontWeight: 'bold',
+                              minHeight: '48px',
+                              touchAction: 'manipulation'
                             }}
                           >
                             End Round
@@ -310,7 +384,7 @@ export default function HomeRunDerby() {
                         </div>
                       ) : (
                         // Regular main round display
-                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '5px'}}>
+                        <div style={{display: 'grid', gridTemplateColumns: `repeat(${pitchCount}, 1fr)`, gap: '5px'}}>
                           {p.main.map((m, i)=> (
                             <button 
                               key={i} 
@@ -318,14 +392,16 @@ export default function HomeRunDerby() {
                               title={`Pitch ${i+1}`}
                               style={{
                                 aspectRatio: '1',
+                                minHeight: '50px',
                                 border: '1px solid #555',
                                 borderRadius: '6px',
                                 backgroundColor: m==='hr' ? '#047857' : m==='x' ? '#be123c' : '#444',
                                 color: '#fff',
                                 cursor: (locked||tb.active||ended) ? 'not-allowed' : 'pointer',
                                 opacity: (locked||tb.active||ended) ? 0.6 : 1,
-                                fontSize: '0.8rem',
-                                fontWeight: 'bold'
+                                fontSize: '0.9rem',
+                                fontWeight: 'bold',
+                                touchAction: 'manipulation'
                               }}
                             >
                               {m==='' ? '☐' : m==='x' ? '✗' : 'HR'}
