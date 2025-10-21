@@ -12,9 +12,9 @@ export default function HomeRunDerby() {
       try {
         // Try to play MP3 file first - test multiple paths
         const audioPaths = [
-          '/Sounds/woo-hoo-82843.mp3',
-          './Sounds/woo-hoo-82843.mp3',
-          'Sounds/woo-hoo-82843.mp3'
+          '/Sounds/homer_woohoo.mp3',
+          './Sounds/homer_woohoo.mp3',
+          'Sounds/homer_woohoo.mp3'
         ];
         
         let audio = null;
@@ -387,7 +387,7 @@ export default function HomeRunDerby() {
               await enableAudio(); 
               // Test if MP3 file is accessible
               try {
-                const response = await fetch('/Sounds/woo-hoo-82843.mp3');
+                const response = await fetch('/Sounds/homer_woohoo.mp3');
                 console.log('MP3 fetch response:', response.status, response.statusText);
                 if (response.ok) {
                   console.log('MP3 file is accessible via fetch');
