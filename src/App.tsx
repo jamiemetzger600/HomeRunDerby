@@ -30,7 +30,43 @@ export default function HomeRunDerby() {
     setPlayers(v=>[...v, p]); setHistory(h=>[{op:'add', p}, ...h]); setName('');
   }
 
-  function undo(){ const last=history[0]; if(!last) return; setHistory(h=>h.slice(1)); if(last.op==='add'){ setPlayers(v=>v.filter(p=>p.id!==last.p.id)); } else if(last.op==='remove'){ setPlayers(v=>[last.p, ...v]); } else if(last.op==='pitch'){ if(last.scope==='main'){ setPlayers(prev=>prev.map(p=>{ if(p.id!==last.id) return p; const order:Pitch[]=['','x','hr']; const cur=p.main[last.idx]||''; const prevMark=order[(order.indexOf(cur)+order.length-1)%order.length]; const main=[...p.main]; main[last.idx]=prevMark; return {...p, main}; })); } else if(last.scope==='tb'){ setPlayers(prev=>prev.map(p=>{ if(p.id!==last.id) return p; const tb=p.tb.map(r=>[...r]); const cur=tb[last.round]?.[last.pitch]||''; if(tb[last.round]) tb[last.round][last.pitch]=''; return {...p, tb}; })); } } }
+  function undo(){ 
+    const last=history[0]; 
+    if(!last) return; 
+    setHistory(h=>h.slice(1)); 
+    
+    if(last.op==='add'){ 
+      setPlayers(v=>v.filter(p=>p.id!==last.p.id)); 
+    } else if(last.op==='remove'){ 
+      setPlayers(v=>[last.p, ...v]); 
+    } else if(last.op==='pitch'){ 
+      if(last.scope==='main'){ 
+        setPlayers(prev=>prev.map(p=>{ 
+          if(p.id!==last.id) return p; 
+          const order:Pitch[]=['','x','hr']; 
+          const cur=p.main[last.idx]||''; 
+          const prevMark=order[(order.indexOf(cur)+order.length-1)%order.length]; 
+          const main=[...p.main]; 
+          main[last.idx]=prevMark; 
+          return {...p, main}; 
+        })); 
+      } else if(last.scope==='tb'){ 
+        setPlayers(prev=>prev.map(p=>{ 
+          if(p.id!==last.id) return p; 
+          const tb=p.tb.map(r=>[...r]); 
+          const cur=tb[last.round]?.[last.pitch]||''; 
+          if(tb[last.round]) tb[last.round][last.pitch]=''; 
+          return {...p, tb}; 
+        })); 
+      } 
+    } 
+    
+    // After undo, ensure we're not locked out of making changes
+    // Only keep locked state if the game has actually ended
+    if (!ended) {
+      setLocked(false);
+    }
+  }
 
   function cycleMain(id:string, idx:number){ setPlayers(prev=>prev.map(p=>{ if(p.id!==id) return p; const order:Pitch[]=['','x','hr']; const cur=p.main[idx]||''; const nxt=order[(order.indexOf(cur)+1)%order.length]; const main=[...p.main]; main[idx]=nxt; return {...p, main}; })); setHistory(h=>[{op:'pitch', scope:'main', id, idx}, ...h]); }
 
@@ -38,11 +74,53 @@ export default function HomeRunDerby() {
 
   function recordTb(id:string, round:number, pitch:number, mark:Pitch){ setPlayers(prev=>prev.map(p=>{ if(p.id!==id) return p; const tb = p.tb.map(r=>[...r]); while(tb.length<=round) tb.push([]); const prevMark = tb[round][pitch]||''; tb[round][pitch]=mark; return {...p, tb}; })); setHistory(h=>[{op:'pitch', scope:'tb', id, round, pitch, mark}, ...h]); }
 
-  function recordLightning(mark:Pitch){ if(!tb.active) return; const id=tb.ids[tb.idx]; recordTb(id, tb.round, tb.pitch, mark); const proj=new Map(scores); if(mark==='hr') proj.set(id, (proj.get(id)||0)+1);
-    let nextPitch=tb.pitch+1; let nextIdx=tb.idx; let nextRound=tb.round;
-    if(nextPitch>=3){ nextPitch=0; nextIdx+=1; }
-    if(nextIdx>=tb.ids.length){ const topVal=Math.max(...tb.ids.map(pid=>proj.get(pid)||0)); const still=tb.ids.filter(pid=>(proj.get(pid)||0)===topVal); if(still.length===1){ setTb({active:false, ids:[], round:0, idx:0, pitch:0}); setEnded(true); return; } nextIdx=0; nextRound=tb.round+1; }
-    setTb({...tb, pitch:nextPitch, idx:nextIdx, round:nextRound});
+  function recordLightning(pitchIndex:number){ 
+    if(!tb.active) return; 
+    const id=tb.ids[tb.idx]; 
+    const currentRoundPitches = players.find(p=>p.id===id)?.tb[tb.round] || [];
+    const currentPitch = currentRoundPitches[pitchIndex] || '';
+    
+    // Cycle through: '' -> 'x' -> 'hr' -> ''
+    const order:Pitch[] = ['','x','hr'];
+    const currentIndex = order.indexOf(currentPitch);
+    const nextIndex = (currentIndex + 1) % order.length;
+    const nextMark = order[nextIndex];
+    
+    recordTb(id, tb.round, pitchIndex, nextMark);
+    
+    // Check if all 3 pitches are filled for current player
+    const updatedPlayer = players.find(p=>p.id===id);
+    const updatedPitches = updatedPlayer?.tb[tb.round] || [];
+    const allFilled = updatedPitches.length >= 3 && updatedPitches.every(p => p !== '');
+    
+    if (allFilled) {
+      // Move to next player or next round
+      let nextIdx = tb.idx + 1;
+      let nextRound = tb.round;
+      
+      if (nextIdx >= tb.ids.length) {
+        // All players completed this round, check for winner
+        const proj = new Map(scores);
+        updatedPitches.forEach(p => {
+          if (p === 'hr') proj.set(id, (proj.get(id)||0)+1);
+        });
+        
+        const topVal = Math.max(...tb.ids.map(pid=>proj.get(pid)||0));
+        const still = tb.ids.filter(pid=>(proj.get(pid)||0)===topVal);
+        
+        if (still.length === 1) {
+          setTb({active:false, ids:[], round:0, idx:0, pitch:0});
+          setEnded(true);
+          return;
+        }
+        
+        // Start next round
+        nextIdx = 0;
+        nextRound = tb.round + 1;
+      }
+      
+      setTb({...tb, idx: nextIdx, round: nextRound});
+    }
   }
 
   function reset(){ if(!confirm('Reset all scores and players?')) return; setPlayers([]); setLocked(false); setEnded(false); setHistory([]); setTb({active:false, ids:[], round:0, idx:0, pitch:0}); }
@@ -157,7 +235,7 @@ export default function HomeRunDerby() {
                             return (
                               <button 
                                 key={i} 
-                                onClick={()=>recordLightning(pitch === '' ? 'x' : pitch === 'x' ? 'hr' : '')} 
+                                onClick={()=>recordLightning(i)} 
                                 title={`Lightning Pitch ${i+1}`}
                                 style={{
                                   aspectRatio: '1',
