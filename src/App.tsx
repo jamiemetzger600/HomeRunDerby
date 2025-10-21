@@ -8,31 +8,40 @@ export default function HomeRunDerby() {
   const playSound = (type: 'hr' | 'miss') => {
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
       
       if (type === 'hr') {
-        // Home run sound - ascending tone
-        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.3);
-        oscillator.type = 'sine';
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.3);
-      } else {
-        // Miss sound - descending tone
-        oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.2);
-        oscillator.type = 'sawtooth';
-        gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.2);
+        // Big crowd cheer - multiple oscillators for rich sound
+        const oscillators = [];
+        const gainNodes = [];
+        
+        // Create multiple oscillators for a crowd effect
+        for (let i = 0; i < 5; i++) {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          // Different frequencies for each oscillator (crowd voices)
+          const baseFreq = 200 + (i * 50);
+          oscillator.frequency.setValueAtTime(baseFreq, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, audioContext.currentTime + 0.8);
+          
+          // Mix of sine and triangle waves for richness
+          oscillator.type = i % 2 === 0 ? 'sine' : 'triangle';
+          
+          // Volume envelope - starts loud, fades out
+          gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+          
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.8);
+          
+          oscillators.push(oscillator);
+          gainNodes.push(gainNode);
+        }
       }
+      // No sound for misses - silence
     } catch (error) {
       // Silently fail if audio context is not available
     }
@@ -137,9 +146,8 @@ export default function HomeRunDerby() {
       const main=[...p.main]; 
       main[idx]=nxt; 
       
-      // Play sound effect only when going from empty to a result
+      // Play sound effect only for home runs
       if (cur === '' && nxt === 'hr') playSound('hr');
-      else if (cur === '' && nxt === 'x') playSound('miss');
       
       return {...p, main}; 
     })); 
@@ -162,9 +170,8 @@ export default function HomeRunDerby() {
     const nextIndex = (currentIndex + 1) % order.length;
     const nextMark = order[nextIndex];
     
-    // Play sound effect only when going from empty to a result
+    // Play sound effect only for home runs
     if (currentPitch === '' && nextMark === 'hr') playSound('hr');
-    else if (currentPitch === '' && nextMark === 'x') playSound('miss');
     
     recordTb(id, tb.round, pitchIndex, nextMark);
   }
