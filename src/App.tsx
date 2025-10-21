@@ -385,11 +385,6 @@ export default function HomeRunDerby() {
             <button onClick={share} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Share</button>
             <button onClick={reset} style={{padding: '8px 12px', backgroundColor: '#dc2626', color: '#fff', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Reset</button>
           </div>
-          {!audioEnabled && (
-            <div style={{color: '#f59e0b', fontSize: '0.8rem', textAlign: 'center', marginTop: '5px'}}>
-              🔊 Click any button to enable sound
-            </div>
-          )}
         </header>
 
         <div style={{backgroundColor: '#2a2a2a', border: '1px solid #444', borderRadius: '8px', padding: '20px', marginBottom: '20px'}}>
