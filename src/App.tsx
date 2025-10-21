@@ -4,47 +4,23 @@ export default function HomeRunDerby() {
   type Pitch = '' | 'x' | 'hr';
   type Player = { id: string; name: string; main: Pitch[]; tb: Pitch[][] };
 
-  // Sound effects using Web Audio API
+  // Sound effects using MP3 file
   const playSound = (type: 'hr' | 'miss') => {
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      
-      if (type === 'hr') {
-        // Big crowd cheer - multiple oscillators for rich sound
-        const oscillators = [];
-        const gainNodes = [];
-        
-        // Create multiple oscillators for a crowd effect
-        for (let i = 0; i < 5; i++) {
-          const oscillator = audioContext.createOscillator();
-          const gainNode = audioContext.createGain();
-          
-          oscillator.connect(gainNode);
-          gainNode.connect(audioContext.destination);
-          
-          // Different frequencies for each oscillator (crowd voices)
-          const baseFreq = 200 + (i * 50);
-          oscillator.frequency.setValueAtTime(baseFreq, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, audioContext.currentTime + 0.8);
-          
-          // Mix of sine and triangle waves for richness
-          oscillator.type = i % 2 === 0 ? 'sine' : 'triangle';
-          
-          // Volume envelope - starts loud, fades out
-          gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
-          
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.8);
-          
-          oscillators.push(oscillator);
-          gainNodes.push(gainNode);
-        }
+    if (type === 'hr') {
+      try {
+        // Create audio element for MP3 file
+        const audio = new Audio('/Sounds/homerun.mp3');
+        audio.volume = 0.7; // Set volume to 70%
+        audio.play().catch(error => {
+          // Silently fail if audio can't play (e.g., user hasn't interacted with page yet)
+          console.log('Audio play failed:', error);
+        });
+      } catch (error) {
+        // Silently fail if audio creation fails
+        console.log('Audio creation failed:', error);
       }
-      // No sound for misses - silence
-    } catch (error) {
-      // Silently fail if audio context is not available
     }
+    // No sound for misses - silence
   };
 
   const [players, setPlayers] = useState<Player[]>(() => {
