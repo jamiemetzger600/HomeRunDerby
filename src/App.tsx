@@ -117,8 +117,6 @@ export default function HomeRunDerby() {
     if(!tb.active) return;
     
     const id = tb.ids[tb.idx];
-    const currentPlayer = players.find(p => p.id === id);
-    const currentPitches = currentPlayer?.tb[tb.round] || [];
     
     // Move to next player or next round
     let nextIdx = tb.idx + 1;
@@ -126,21 +124,36 @@ export default function HomeRunDerby() {
     
     if (nextIdx >= tb.ids.length) {
       // All players completed this round, check for winner
-      const proj = new Map(scores);
-      currentPitches.forEach(p => {
-        if (p === 'hr') proj.set(id, (proj.get(id)||0)+1);
+      // Calculate total Lightning Round scores for all players
+      const lightningScores = new Map();
+      
+      tb.ids.forEach(playerId => {
+        const player = players.find(p => p.id === playerId);
+        let totalLightningHrs = 0;
+        
+        // Sum up all home runs from all lightning rounds for this player
+        if (player) {
+          player.tb.forEach(round => {
+            round.forEach(pitch => {
+              if (pitch === 'hr') totalLightningHrs++;
+            });
+          });
+        }
+        
+        lightningScores.set(playerId, totalLightningHrs);
       });
       
-      const topVal = Math.max(...tb.ids.map(pid=>proj.get(pid)||0));
-      const still = tb.ids.filter(pid=>(proj.get(pid)||0)===topVal);
+      const topVal = Math.max(...lightningScores.values());
+      const still = tb.ids.filter(pid => lightningScores.get(pid) === topVal);
       
       if (still.length === 1) {
+        // We have a winner!
         setTb({active:false, ids:[], round:0, idx:0, pitch:0});
         setEnded(true);
         return;
       }
       
-      // Start next round
+      // Still tied, start next round
       nextIdx = 0;
       nextRound = tb.round + 1;
     }
@@ -208,7 +221,7 @@ export default function HomeRunDerby() {
             {ended ? (
               <div style={{color: '#10b981', fontWeight: 'bold'}}>🏆 Winner{leaders.length>1?'s':''} crowned</div>
             ) : tb.active ? (
-              <div style={{color: '#f59e0b', fontWeight: 'bold'}}>⚡ Lightning round (3 pitches each)</div>
+              <div style={{color: '#f59e0b', fontWeight: 'bold'}}>⚡ Lightning round {tb.round + 1} (3 pitches each)</div>
             ) : (
               <div style={{color: '#999', fontSize: '0.9rem'}}>Mark each of 6 pitches: click to cycle ☐ → ✗ → HR</div>
             )}
