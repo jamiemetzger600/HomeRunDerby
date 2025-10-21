@@ -7,6 +7,8 @@ export default function HomeRunDerby() {
   // Sound effects using MP3 file with fallback
   const playSound = (type: 'hr' | 'miss') => {
     if (type === 'hr') {
+      console.log('Attempting to play home run sound...');
+      
       try {
         // Try to play MP3 file first
         const audio = new Audio('/Sounds/woo-hoo-82843.mp3');
@@ -14,13 +16,34 @@ export default function HomeRunDerby() {
         audio.preload = 'auto';
         
         // Add event listeners for debugging
+        audio.addEventListener('loadstart', () => {
+          console.log('Audio loading started');
+        });
+        
+        audio.addEventListener('loadeddata', () => {
+          console.log('Audio data loaded');
+        });
+        
+        audio.addEventListener('canplay', () => {
+          console.log('Audio can play');
+        });
+        
         audio.addEventListener('canplaythrough', () => {
           console.log('Audio can play through');
         });
         
         audio.addEventListener('error', (e) => {
           console.log('Audio error:', e);
+          console.log('Error details:', audio.error);
           playFallbackSound();
+        });
+        
+        audio.addEventListener('play', () => {
+          console.log('Audio started playing');
+        });
+        
+        audio.addEventListener('ended', () => {
+          console.log('Audio finished playing');
         });
         
         const playPromise = audio.play();
@@ -30,8 +53,13 @@ export default function HomeRunDerby() {
             console.log('Audio played successfully');
           }).catch(error => {
             console.log('MP3 play failed, using fallback:', error);
+            console.log('Error name:', error.name);
+            console.log('Error message:', error.message);
             playFallbackSound();
           });
+        } else {
+          console.log('Play promise is undefined, trying fallback');
+          playFallbackSound();
         }
       } catch (error) {
         // If audio creation fails, use fallback
@@ -139,14 +167,20 @@ export default function HomeRunDerby() {
   const blankPitches = () => Array.from({length:pitchCount},()=>'' as Pitch);
 
   // Enable audio on first user interaction
-  const enableAudio = () => {
+  const enableAudio = async () => {
     if (!audioEnabled) {
       setAudioEnabled(true);
-      // Create and immediately dispose of an audio context to enable audio
+      // Create and resume audio context to enable audio
       try {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioContext.resume();
-        console.log('Audio enabled');
+        console.log('Audio context created, state:', audioContext.state);
+        
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+          console.log('Audio context resumed, state:', audioContext.state);
+        }
+        
+        console.log('Audio enabled successfully');
       } catch (error) {
         console.log('Failed to enable audio:', error);
       }
@@ -326,7 +360,7 @@ export default function HomeRunDerby() {
             <button onClick={undo} disabled={!history.length} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: history.length ? 'pointer' : 'not-allowed', fontSize: '0.9rem'}}>Undo</button>
             <button onClick={share} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Share</button>
             <button onClick={reset} style={{padding: '8px 12px', backgroundColor: '#dc2626', color: '#fff', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Reset</button>
-            <button onClick={() => { enableAudio(); playSound('hr'); }} style={{padding: '8px 12px', backgroundColor: '#059669', color: '#fff', border: '1px solid #059669', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>🔊 Test Sound</button>
+            <button onClick={async () => { await enableAudio(); playSound('hr'); }} style={{padding: '8px 12px', backgroundColor: '#059669', color: '#fff', border: '1px solid #059669', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>🔊 Test Sound</button>
           </div>
           {!audioEnabled && (
             <div style={{color: '#f59e0b', fontSize: '0.8rem', textAlign: 'center', marginTop: '5px'}}>
