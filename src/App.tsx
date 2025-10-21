@@ -384,22 +384,6 @@ export default function HomeRunDerby() {
             <button onClick={undo} disabled={!history.length} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: history.length ? 'pointer' : 'not-allowed', fontSize: '0.9rem'}}>Undo</button>
             <button onClick={share} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Share</button>
             <button onClick={reset} style={{padding: '8px 12px', backgroundColor: '#dc2626', color: '#fff', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Reset</button>
-            <button onClick={async () => { 
-              await enableAudio(); 
-              // Test if MP3 file is accessible
-              try {
-                const response = await fetch('/HomeRunDerby/Sounds/homer_woohoo.mp3');
-                console.log('MP3 fetch response:', response.status, response.statusText);
-                if (response.ok) {
-                  console.log('MP3 file is accessible via fetch');
-                } else {
-                  console.log('MP3 file not accessible via fetch');
-                }
-              } catch (error) {
-                console.log('MP3 fetch error:', error);
-              }
-              playSound('hr'); 
-            }} style={{padding: '8px 12px', backgroundColor: '#059669', color: '#fff', border: '1px solid #059669', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>🔊 Test Sound</button>
           </div>
           {!audioEnabled && (
             <div style={{color: '#f59e0b', fontSize: '0.8rem', textAlign: 'center', marginTop: '5px'}}>
