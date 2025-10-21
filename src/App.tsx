@@ -53,7 +53,6 @@ export default function HomeRunDerby() {
 
   function short(n:string){ const parts=n.trim().split(/\s+/); if(parts.length===1) return parts[0]; const last=parts[parts.length-1]; return `${parts[0]} ${last.charAt(0).toUpperCase()}.`; }
 
-  function toCSV(ps: { name: string; id: string }[]){ const rows=[["Player","HomeRuns"], ...ps.map(p=>[p.name, String(scores.get(p.id)||0)])]; return rows.map(r=>r.map(f=>(/[",\n]/.test(f)? `"${f.replace(/"/g,'""')}"`:f)).join(',')).join('\n'); }
 
   return (
     <div style={{minHeight: '100vh', backgroundColor: '#1a1a1a', color: '#fff', padding: '20px', fontFamily: 'Arial, sans-serif'}}>
@@ -207,7 +206,6 @@ export default function HomeRunDerby() {
               <button onClick={()=>recordLightning('hr')} style={{padding: '8px 12px', backgroundColor: '#047857', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>HR</button>
             </div>
           )}
-          <button onClick={()=>navigator.clipboard.writeText(toCSV(players.map(p=>({name:p.name, id:p.id}))))} disabled={!players.length} style={{padding: '10px 20px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: !players.length ? 'not-allowed' : 'pointer'}}>Export CSV</button>
         </div>
 
         {ended && (
