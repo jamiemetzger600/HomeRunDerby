@@ -22,11 +22,11 @@ export default function HomeRunDerby() {
   const leaders = useMemo(()=> players.filter(p=> (scores.get(p.id)||0)===maxHr && maxHr>0),[players, maxHr, scores]);
   const top3 = useMemo(()=> [...players].sort((a,b)=> (scores.get(b.id)||0) - (scores.get(a.id)||0) || a.name.localeCompare(b.name)).slice(0,3),[players, scores]);
 
-  const blank7 = () => Array.from({length:7},()=>'' as Pitch);
+  const blank6 = () => Array.from({length:6},()=>'' as Pitch);
 
   function addPlayer(){
     const n = name.trim(); if(!n) return;
-    const p: Player = { id: crypto.randomUUID(), name: n, main: blank7(), tb: [] };
+    const p: Player = { id: crypto.randomUUID(), name: n, main: blank6(), tb: [] };
     setPlayers(v=>[...v, p]); setHistory(h=>[{op:'add', p}, ...h]); setName('');
   }
 
@@ -111,43 +111,41 @@ export default function HomeRunDerby() {
     const nextMark = order[nextIndex];
     
     recordTb(id, tb.round, pitchIndex, nextMark);
+  }
+
+  function endLightningRound(){
+    if(!tb.active) return;
     
-    // Use setTimeout to ensure state updates are processed before checking
-    setTimeout(() => {
-      // Check if all 3 pitches are filled for current player
-      const updatedPlayer = players.find(p=>p.id===id);
-      const updatedPitches = updatedPlayer?.tb[tb.round] || [];
-      const allFilled = updatedPitches.length >= 3 && updatedPitches.every(p => p !== '');
+    const id = tb.ids[tb.idx];
+    const currentPlayer = players.find(p => p.id === id);
+    const currentPitches = currentPlayer?.tb[tb.round] || [];
+    
+    // Move to next player or next round
+    let nextIdx = tb.idx + 1;
+    let nextRound = tb.round;
+    
+    if (nextIdx >= tb.ids.length) {
+      // All players completed this round, check for winner
+      const proj = new Map(scores);
+      currentPitches.forEach(p => {
+        if (p === 'hr') proj.set(id, (proj.get(id)||0)+1);
+      });
       
-      if (allFilled) {
-        // Move to next player or next round
-        let nextIdx = tb.idx + 1;
-        let nextRound = tb.round;
-        
-        if (nextIdx >= tb.ids.length) {
-          // All players completed this round, check for winner
-          const proj = new Map(scores);
-          updatedPitches.forEach(p => {
-            if (p === 'hr') proj.set(id, (proj.get(id)||0)+1);
-          });
-          
-          const topVal = Math.max(...tb.ids.map(pid=>proj.get(pid)||0));
-          const still = tb.ids.filter(pid=>(proj.get(pid)||0)===topVal);
-          
-          if (still.length === 1) {
-            setTb({active:false, ids:[], round:0, idx:0, pitch:0});
-            setEnded(true);
-            return;
-          }
-          
-          // Start next round
-          nextIdx = 0;
-          nextRound = tb.round + 1;
-        }
-        
-        setTb({...tb, idx: nextIdx, round: nextRound});
+      const topVal = Math.max(...tb.ids.map(pid=>proj.get(pid)||0));
+      const still = tb.ids.filter(pid=>(proj.get(pid)||0)===topVal);
+      
+      if (still.length === 1) {
+        setTb({active:false, ids:[], round:0, idx:0, pitch:0});
+        setEnded(true);
+        return;
       }
-    }, 0);
+      
+      // Start next round
+      nextIdx = 0;
+      nextRound = tb.round + 1;
+    }
+    
+    setTb({...tb, idx: nextIdx, round: nextRound});
   }
 
   function reset(){ if(!confirm('Reset all scores and players?')) return; setPlayers([]); setLocked(false); setEnded(false); setHistory([]); setTb({active:false, ids:[], round:0, idx:0, pitch:0}); }
@@ -212,7 +210,7 @@ export default function HomeRunDerby() {
             ) : tb.active ? (
               <div style={{color: '#f59e0b', fontWeight: 'bold'}}>⚡ Lightning round (3 pitches each)</div>
             ) : (
-              <div style={{color: '#999', fontSize: '0.9rem'}}>Mark each of 7 pitches: click to cycle ☐ → ✗ → HR</div>
+              <div style={{color: '#999', fontSize: '0.9rem'}}>Mark each of 6 pitches: click to cycle ☐ → ✗ → HR</div>
             )}
           </div>
           
@@ -255,34 +253,51 @@ export default function HomeRunDerby() {
 
                       {/* Show lightning round pitches if this is the active player */}
                       {isActiveLightningPlayer ? (
-                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '5px'}}>
-                          {Array.from({length: 3}).map((_, i)=> {
-                            const currentRoundPitches = p.tb[tb.round] || [];
-                            const pitch = currentRoundPitches[i] || '';
-                            return (
-                              <button 
-                                key={i} 
-                                onClick={()=>recordLightning(i)} 
-                                title={`Lightning Pitch ${i+1}`}
-                                style={{
-                                  aspectRatio: '1',
-                                  border: '1px solid #555',
-                                  borderRadius: '6px',
-                                  backgroundColor: pitch==='hr' ? '#047857' : pitch==='x' ? '#be123c' : '#444',
-                                  color: '#fff',
-                                  cursor: 'pointer',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 'bold'
-                                }}
-                              >
-                                {pitch==='' ? '☐' : pitch==='x' ? '✗' : 'HR'}
-                              </button>
-                            );
-                          })}
+                        <div>
+                          <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '5px', marginBottom: '10px'}}>
+                            {Array.from({length: 3}).map((_, i)=> {
+                              const currentRoundPitches = p.tb[tb.round] || [];
+                              const pitch = currentRoundPitches[i] || '';
+                              return (
+                                <button 
+                                  key={i} 
+                                  onClick={()=>recordLightning(i)} 
+                                  title={`Lightning Pitch ${i+1}`}
+                                  style={{
+                                    aspectRatio: '1',
+                                    border: '1px solid #555',
+                                    borderRadius: '6px',
+                                    backgroundColor: pitch==='hr' ? '#047857' : pitch==='x' ? '#be123c' : '#444',
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  {pitch==='' ? '☐' : pitch==='x' ? '✗' : 'HR'}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <button 
+                            onClick={endLightningRound}
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#f59e0b',
+                              color: '#fff',
+                              border: '1px solid #f59e0b',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            End Round
+                          </button>
                         </div>
                       ) : (
                         // Regular main round display
-                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px'}}>
+                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '5px'}}>
                           {p.main.map((m, i)=> (
                             <button 
                               key={i} 
