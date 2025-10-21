@@ -10,12 +10,29 @@ export default function HomeRunDerby() {
       try {
         // Try to play MP3 file first
         const audio = new Audio('/Sounds/woo-hoo-82843.mp3');
-        audio.volume = 0.7;
-        audio.play().catch(error => {
-          // If MP3 fails, play fallback generated sound
-          console.log('MP3 play failed, using fallback:', error);
+        audio.volume = 0.8;
+        audio.preload = 'auto';
+        
+        // Add event listeners for debugging
+        audio.addEventListener('canplaythrough', () => {
+          console.log('Audio can play through');
+        });
+        
+        audio.addEventListener('error', (e) => {
+          console.log('Audio error:', e);
           playFallbackSound();
         });
+        
+        const playPromise = audio.play();
+        
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            console.log('Audio played successfully');
+          }).catch(error => {
+            console.log('MP3 play failed, using fallback:', error);
+            playFallbackSound();
+          });
+        }
       } catch (error) {
         // If audio creation fails, use fallback
         console.log('Audio creation failed, using fallback:', error);
@@ -30,21 +47,38 @@ export default function HomeRunDerby() {
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       
-      // Simple crowd cheer fallback
-      const oscillator = audioContext.createOscillator();
+      // Resume audio context if suspended (required for user interaction)
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Create a more realistic crowd cheer sound
+      const oscillator1 = audioContext.createOscillator();
+      const oscillator2 = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       
-      oscillator.connect(gainNode);
+      oscillator1.connect(gainNode);
+      oscillator2.connect(gainNode);
       gainNode.connect(audioContext.destination);
       
-      oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-      oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.5);
-      oscillator.type = 'sine';
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      // Create a "woo-hoo" like sound with two oscillators
+      oscillator1.frequency.setValueAtTime(400, audioContext.currentTime);
+      oscillator1.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.3);
+      oscillator1.type = 'sine';
       
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.5);
+      oscillator2.frequency.setValueAtTime(600, audioContext.currentTime);
+      oscillator2.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.3);
+      oscillator2.type = 'triangle';
+      
+      gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
+      
+      oscillator1.start(audioContext.currentTime);
+      oscillator2.start(audioContext.currentTime);
+      oscillator1.stop(audioContext.currentTime + 0.6);
+      oscillator2.stop(audioContext.currentTime + 0.6);
+      
+      console.log('Fallback sound played');
     } catch (error) {
       console.log('Fallback sound failed:', error);
     }
@@ -54,6 +88,9 @@ export default function HomeRunDerby() {
   const [clickTimes, setClickTimes] = useState<Map<string, number>>(new Map());
   
   const handleClick = (id: string, idx: number, isLightning: boolean = false) => {
+    // Enable audio on first interaction
+    enableAudio();
+    
     const now = Date.now();
     const key = `${id}-${idx}-${isLightning}`;
     const lastClick = clickTimes.get(key) || 0;
@@ -87,6 +124,7 @@ export default function HomeRunDerby() {
   const [history, setHistory] = useState<any[]>([]);
   const [tb, setTb] = useState<{active:boolean; ids:string[]; round:number; idx:number; pitch:number}>({active:false, ids:[], round:0, idx:0, pitch:0});
   const [pitchCount, setPitchCount] = useState<number>(() => { try { return JSON.parse(localStorage.getItem('hrd_pitch_count_v2')||'6'); } catch { return 6; } });
+  const [audioEnabled, setAudioEnabled] = useState(false);
 
   useEffect(()=>localStorage.setItem('hrd_players_v2', JSON.stringify(players)),[players]);
   useEffect(()=>localStorage.setItem('hrd_locked_v2', JSON.stringify(locked)),[locked]);
@@ -99,6 +137,21 @@ export default function HomeRunDerby() {
   const top3 = useMemo(()=> [...players].sort((a,b)=> (scores.get(b.id)||0) - (scores.get(a.id)||0) || a.name.localeCompare(b.name)).slice(0,3),[players, scores]);
 
   const blankPitches = () => Array.from({length:pitchCount},()=>'' as Pitch);
+
+  // Enable audio on first user interaction
+  const enableAudio = () => {
+    if (!audioEnabled) {
+      setAudioEnabled(true);
+      // Create and immediately dispose of an audio context to enable audio
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContext.resume();
+        console.log('Audio enabled');
+      } catch (error) {
+        console.log('Failed to enable audio:', error);
+      }
+    }
+  };
 
   function addPlayer(){
     const n = name.trim(); if(!n) return;
@@ -273,7 +326,13 @@ export default function HomeRunDerby() {
             <button onClick={undo} disabled={!history.length} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: history.length ? 'pointer' : 'not-allowed', fontSize: '0.9rem'}}>Undo</button>
             <button onClick={share} style={{padding: '8px 12px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Share</button>
             <button onClick={reset} style={{padding: '8px 12px', backgroundColor: '#dc2626', color: '#fff', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>Reset</button>
+            <button onClick={() => { enableAudio(); playSound('hr'); }} style={{padding: '8px 12px', backgroundColor: '#059669', color: '#fff', border: '1px solid #059669', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem'}}>🔊 Test Sound</button>
           </div>
+          {!audioEnabled && (
+            <div style={{color: '#f59e0b', fontSize: '0.8rem', textAlign: 'center', marginTop: '5px'}}>
+              🔊 Click any button to enable sound
+            </div>
+          )}
         </header>
 
         <div style={{backgroundColor: '#2a2a2a', border: '1px solid #444', borderRadius: '8px', padding: '20px', marginBottom: '20px'}}>
