@@ -58,6 +58,30 @@ export default function HomeRunDerby() {
           if(tb[last.round]) tb[last.round][last.pitch]=''; 
           return {...p, tb}; 
         })); 
+        
+        // After undoing a lightning round move, check if we need to reset winner state
+        // Use setTimeout to ensure state updates are processed
+        setTimeout(() => {
+          const currentPlayers = players.map(p => {
+            if (p.id === last.id) {
+              const tb = p.tb.map(r => [...r]);
+              if (tb[last.round]) tb[last.round][last.pitch] = '';
+              return { ...p, tb };
+            }
+            return p;
+          });
+          
+          // Check if any lightning round scores exist
+          const hasLightningScores = currentPlayers.some(p => 
+            p.tb.some(round => round.some(pitch => pitch !== ''))
+          );
+          
+          // If no lightning scores exist and we're in a winner state, reset to tie-breaker
+          if (!hasLightningScores && ended) {
+            setEnded(false);
+            setTb({active: true, ids: tb.ids, round: 0, idx: 0, pitch: 0});
+          }
+        }, 0);
       } 
     } 
     
@@ -88,39 +112,42 @@ export default function HomeRunDerby() {
     
     recordTb(id, tb.round, pitchIndex, nextMark);
     
-    // Check if all 3 pitches are filled for current player
-    const updatedPlayer = players.find(p=>p.id===id);
-    const updatedPitches = updatedPlayer?.tb[tb.round] || [];
-    const allFilled = updatedPitches.length >= 3 && updatedPitches.every(p => p !== '');
-    
-    if (allFilled) {
-      // Move to next player or next round
-      let nextIdx = tb.idx + 1;
-      let nextRound = tb.round;
+    // Use setTimeout to ensure state updates are processed before checking
+    setTimeout(() => {
+      // Check if all 3 pitches are filled for current player
+      const updatedPlayer = players.find(p=>p.id===id);
+      const updatedPitches = updatedPlayer?.tb[tb.round] || [];
+      const allFilled = updatedPitches.length >= 3 && updatedPitches.every(p => p !== '');
       
-      if (nextIdx >= tb.ids.length) {
-        // All players completed this round, check for winner
-        const proj = new Map(scores);
-        updatedPitches.forEach(p => {
-          if (p === 'hr') proj.set(id, (proj.get(id)||0)+1);
-        });
+      if (allFilled) {
+        // Move to next player or next round
+        let nextIdx = tb.idx + 1;
+        let nextRound = tb.round;
         
-        const topVal = Math.max(...tb.ids.map(pid=>proj.get(pid)||0));
-        const still = tb.ids.filter(pid=>(proj.get(pid)||0)===topVal);
-        
-        if (still.length === 1) {
-          setTb({active:false, ids:[], round:0, idx:0, pitch:0});
-          setEnded(true);
-          return;
+        if (nextIdx >= tb.ids.length) {
+          // All players completed this round, check for winner
+          const proj = new Map(scores);
+          updatedPitches.forEach(p => {
+            if (p === 'hr') proj.set(id, (proj.get(id)||0)+1);
+          });
+          
+          const topVal = Math.max(...tb.ids.map(pid=>proj.get(pid)||0));
+          const still = tb.ids.filter(pid=>(proj.get(pid)||0)===topVal);
+          
+          if (still.length === 1) {
+            setTb({active:false, ids:[], round:0, idx:0, pitch:0});
+            setEnded(true);
+            return;
+          }
+          
+          // Start next round
+          nextIdx = 0;
+          nextRound = tb.round + 1;
         }
         
-        // Start next round
-        nextIdx = 0;
-        nextRound = tb.round + 1;
+        setTb({...tb, idx: nextIdx, round: nextRound});
       }
-      
-      setTb({...tb, idx: nextIdx, round: nextRound});
-    }
+    }, 0);
   }
 
   function reset(){ if(!confirm('Reset all scores and players?')) return; setPlayers([]); setLocked(false); setEnded(false); setHistory([]); setTb({active:false, ids:[], round:0, idx:0, pitch:0}); }
