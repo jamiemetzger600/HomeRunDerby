@@ -4,23 +4,78 @@ export default function HomeRunDerby() {
   type Pitch = '' | 'x' | 'hr';
   type Player = { id: string; name: string; main: Pitch[]; tb: Pitch[][] };
 
-  // Sound effects using MP3 file
+  // Sound effects using MP3 file with fallback
   const playSound = (type: 'hr' | 'miss') => {
     if (type === 'hr') {
       try {
-        // Create audio element for MP3 file
+        // Try to play MP3 file first
         const audio = new Audio('/Sounds/homerun.mp3');
-        audio.volume = 0.7; // Set volume to 70%
+        audio.volume = 0.7;
         audio.play().catch(error => {
-          // Silently fail if audio can't play (e.g., user hasn't interacted with page yet)
-          console.log('Audio play failed:', error);
+          // If MP3 fails, play fallback generated sound
+          console.log('MP3 play failed, using fallback:', error);
+          playFallbackSound();
         });
       } catch (error) {
-        // Silently fail if audio creation fails
-        console.log('Audio creation failed:', error);
+        // If audio creation fails, use fallback
+        console.log('Audio creation failed, using fallback:', error);
+        playFallbackSound();
       }
     }
     // No sound for misses - silence
+  };
+
+  // Fallback sound using Web Audio API
+  const playFallbackSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Simple crowd cheer fallback
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.5);
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (error) {
+      console.log('Fallback sound failed:', error);
+    }
+  };
+
+  // Custom double-click detection with slower timing
+  const [clickTimes, setClickTimes] = useState<Map<string, number>>(new Map());
+  
+  const handleClick = (id: string, idx: number, isLightning: boolean = false) => {
+    const now = Date.now();
+    const key = `${id}-${idx}-${isLightning}`;
+    const lastClick = clickTimes.get(key) || 0;
+    
+    // Double-click threshold: 600ms (slower than default 300ms)
+    if (now - lastClick < 600) {
+      // This is a double-click
+      if (isLightning) {
+        recordLightning(idx, true);
+      } else {
+        cycleMain(id, idx, true);
+      }
+    } else {
+      // This is a single click
+      if (isLightning) {
+        recordLightning(idx, false);
+      } else {
+        cycleMain(id, idx, false);
+      }
+    }
+    
+    setClickTimes(prev => new Map(prev.set(key, now)));
   };
 
   const [players, setPlayers] = useState<Player[]>(() => {
@@ -327,8 +382,7 @@ export default function HomeRunDerby() {
                               return (
                               <button 
                                 key={i} 
-                                onClick={()=>recordLightning(i)} 
-                                onDoubleClick={()=>recordLightning(i, true)} 
+                                onClick={()=>handleClick('',i, true)} 
                                 title={`Lightning Pitch ${i+1} - Double-click for home run sound`}
                                 style={{
                                   aspectRatio: '1',
@@ -372,8 +426,7 @@ export default function HomeRunDerby() {
                           {p.main.map((m, i)=> (
                             <button 
                               key={i} 
-                              onClick={()=>!locked && !tb.active && !ended && cycleMain(p.id,i)} 
-                              onDoubleClick={()=>!locked && !tb.active && !ended && cycleMain(p.id,i, true)} 
+                              onClick={()=>!locked && !tb.active && !ended && handleClick(p.id,i, false)} 
                               title={`Pitch ${i+1} - Double-click for home run sound`}
                               style={{
                                 aspectRatio: '1',
