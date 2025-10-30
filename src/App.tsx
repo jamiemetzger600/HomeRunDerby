@@ -253,6 +253,8 @@ export default function HomeRunDerby() {
       setPlayers(v=>v.filter(p=>p.id!==last.p.id)); 
     } else if(last.op==='remove'){ 
       setPlayers(v=>[last.p, ...v]); 
+    } else if(last.op==='edit'){ 
+      setPlayers(prev=>prev.map(p=> p.id===last.id ? last.oldPlayer : p)); 
     } else if(last.op==='pitch'){ 
       if(last.scope==='main'){ 
         setPlayers(prev=>prev.map(p=>{ 
@@ -325,8 +327,6 @@ export default function HomeRunDerby() {
   }
 
   function endMainRoundFor(group: Group){
-    // Lock roster on first group end
-    setLocked(true);
     const arr = byGroup[group];
     if (!arr.length) return;
     const max = Math.max(...arr.map(p=>scores.get(p.id)||0));
@@ -336,6 +336,30 @@ export default function HomeRunDerby() {
       return;
     }
     setEndedByGroup(prev => ({...prev, [group]: true}));
+  }
+
+  function removePlayer(id: string) {
+    const player = players.find(p => p.id === id);
+    if (!player) return;
+    if (!confirm(`Remove ${player.name}?`)) return;
+    setPlayers(v => v.filter(p => p.id !== id));
+    setHistory(h => [{op:'remove', p: player}, ...h]);
+  }
+
+  function editPlayer(id: string) {
+    const player = players.find(p => p.id === id);
+    if (!player) return;
+    const newName = prompt('Edit player name:', player.name);
+    if (!newName || newName.trim() === player.name) return;
+    const newAgeStr = prompt('Edit age (leave blank for no age):', player.age?.toString() || '');
+    const newAge = newAgeStr?.trim() ? parseInt(newAgeStr.trim(), 10) : undefined;
+    if (newAge !== undefined && (isNaN(newAge) || newAge < 0 || newAge > 120)) return;
+    const newGroup: Group = newAge !== undefined && newAge >= 10 && newAge <= 18 ? 'kids' : 'adults';
+    
+    setPlayers(prev => prev.map(p => 
+      p.id === id ? {...p, name: newName.trim(), age: newAge, group: newGroup} : p
+    ));
+    setHistory(h => [{op:'edit', id, oldPlayer: player}, ...h]);
   }
 
   function recordTb(id:string, round:number, pitch:number, mark:Pitch){ setPlayers(prev=>prev.map(p=>{ if(p.id!==id) return p; const tb = p.tb.map(r=>[...r]); while(tb.length<=round) tb.push([]); const prevMark = tb[round][pitch]||''; tb[round][pitch]=mark; return {...p, tb}; })); setHistory(h=>[{op:'pitch', scope:'tb', id, round, pitch, mark}, ...h]); }
@@ -543,7 +567,15 @@ export default function HomeRunDerby() {
                           <span style={{fontWeight: 'bold'}}>{displayRank}. {p.name}{p.age!==undefined?` (${p.age})`:''}</span>
                           {isActiveLightningPlayer && <span style={{color: '#fcd34d', fontSize: '0.8rem'}}>(Lightning Round)</span>}
                         </div>
-                        <div style={{fontSize: '1.2rem', fontWeight: 'bold'}}>{scores.get(p.id)||0}</div>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                          <div style={{fontSize: '1.2rem', fontWeight: 'bold'}}>{scores.get(p.id)||0}</div>
+                          {!endedByGroup[group] && !tb.active && (
+                            <div style={{display: 'flex', gap: '4px'}}>
+                              <button onClick={()=>editPlayer(p.id)} style={{padding: '4px 8px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>✏️</button>
+                              <button onClick={()=>removePlayer(p.id)} style={{padding: '4px 8px', backgroundColor: '#dc2626', color: '#fff', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>🗑️</button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Show lightning round pitches if this is the active player */}
@@ -600,7 +632,7 @@ export default function HomeRunDerby() {
                           {p.main.map((m, i)=> (
                             <button 
                               key={i} 
-                              onClick={()=>!locked && !tb.active && !endedAll && handleClick(p.id,i, false)} 
+                              onClick={()=>!endedByGroup[group] && !tb.active && handleClick(p.id,i, false)} 
                               title={`Pitch ${i+1} - Double-click for home run sound`}
                               style={{
                                 aspectRatio: '1',
@@ -609,8 +641,8 @@ export default function HomeRunDerby() {
                                 borderRadius: '6px',
                                 backgroundColor: m==='hr' ? '#047857' : m==='x' ? '#be123c' : '#444',
                                 color: '#fff',
-                                cursor: (locked||tb.active||endedAll) ? 'not-allowed' : 'pointer',
-                                opacity: (locked||tb.active||endedAll) ? 0.6 : 1,
+                                cursor: (endedByGroup[group]||tb.active) ? 'not-allowed' : 'pointer',
+                                opacity: (endedByGroup[group]||tb.active) ? 0.6 : 1,
                                 fontSize: '0.9rem',
                                 fontWeight: 'bold',
                                 touchAction: 'manipulation'
