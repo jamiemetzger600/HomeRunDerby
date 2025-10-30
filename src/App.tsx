@@ -183,16 +183,16 @@ export default function HomeRunDerby() {
   });
   const [name, setName] = useState('');
   const [age, setAge] = useState<string>('');
-  const [locked, setLocked] = useState<boolean>(() => { try { return JSON.parse(localStorage.getItem('hrd_locked_v2')||'false'); } catch { return false; } });
-  const [ended, setEnded] = useState<boolean>(() => { try { return JSON.parse(localStorage.getItem('hrd_ended_v2')||'false'); } catch { return false; } });
+  const [locked, setLocked] = useState<boolean>(() => { try { return JSON.parse(localStorage.getItem('hrd_locked_v3')||'false'); } catch { return false; } });
+  const [endedByGroup, setEndedByGroup] = useState<{kids:boolean; adults:boolean}>(() => { try { return JSON.parse(localStorage.getItem('hrd_ended_v3')||'{"kids":false,"adults":false}'); } catch { return {kids:false, adults:false}; } });
   const [history, setHistory] = useState<any[]>([]);
-  const [tb, setTb] = useState<{active:boolean; ids:string[]; round:number; idx:number; pitch:number}>({active:false, ids:[], round:0, idx:0, pitch:0});
+  const [tb, setTb] = useState<{active:boolean; group:Group|null; ids:string[]; round:number; idx:number; pitch:number}>({active:false, group:null, ids:[], round:0, idx:0, pitch:0});
   const [pitchCount, setPitchCount] = useState<number>(() => { try { return JSON.parse(localStorage.getItem('hrd_pitch_count_v2')||'6'); } catch { return 6; } });
   const [audioEnabled, setAudioEnabled] = useState(false);
 
   useEffect(()=>localStorage.setItem('hrd_players_v3', JSON.stringify(players)),[players]);
-  useEffect(()=>localStorage.setItem('hrd_locked_v2', JSON.stringify(locked)),[locked]);
-  useEffect(()=>localStorage.setItem('hrd_ended_v2', JSON.stringify(ended)),[ended]);
+  useEffect(()=>localStorage.setItem('hrd_locked_v3', JSON.stringify(locked)),[locked]);
+  useEffect(()=>localStorage.setItem('hrd_ended_v3', JSON.stringify(endedByGroup)),[endedByGroup]);
   useEffect(()=>localStorage.setItem('hrd_pitch_count_v2', JSON.stringify(pitchCount)),[pitchCount]);
 
   const scores = useMemo(()=> new Map(players.map(p=>[p.id, (p.main.filter(m=>m==='hr').length + p.tb.flat().filter(m=>m==='hr').length)])),[players]);
@@ -290,10 +290,10 @@ export default function HomeRunDerby() {
             p.tb.some(round => round.some(pitch => pitch !== ''))
           );
           
-          // If no lightning scores exist and we're in a winner state, reset to tie-breaker
-          if (!hasLightningScores && ended) {
-            setEnded(false);
-            setTb({active: true, ids: tb.ids, round: 0, idx: 0, pitch: 0});
+          // If no lightning scores exist and we're in a winner state, reset tb state
+          const endedAll = endedByGroup.kids && endedByGroup.adults;
+          if (!hasLightningScores && endedAll) {
+            setTb({active: false, group: null, ids: [], round: 0, idx: 0, pitch: 0});
           }
         }, 0);
       } 
@@ -301,7 +301,8 @@ export default function HomeRunDerby() {
     
     // After undo, ensure we're not locked out of making changes
     // Only keep locked state if the game has actually ended
-    if (!ended) {
+    const endedAll = endedByGroup.kids && endedByGroup.adults;
+    if (!endedAll) {
       setLocked(false);
     }
   }
@@ -323,7 +324,28 @@ export default function HomeRunDerby() {
     setHistory(h=>[{op:'pitch', scope:'main', id, idx}, ...h]); 
   }
 
-  function endMainRound(){ setLocked(true); const top=maxHr; const tied=players.filter(p=>(scores.get(p.id)||0)===top); if(tied.length>=2){ setEnded(false); setTb({active:true, ids:tied.map(t=>t.id), round:0, idx:0, pitch:0}); } else { setEnded(true); } }
+  function endMainRound(){
+    setLocked(true);
+    const computeTies = (arr: Player[]) => {
+      if (!arr.length) return [] as string[];
+      const max = Math.max(...arr.map(p=>scores.get(p.id)||0));
+      return arr.filter(p => (scores.get(p.id)||0)===max).map(p=>p.id);
+    };
+    const kidsTies = computeTies(byGroup.kids);
+    const adultsTies = computeTies(byGroup.adults);
+    setEndedByGroup({
+      kids: kidsTies.length<=1 && byGroup.kids.length>0,
+      adults: adultsTies.length<=1 && byGroup.adults.length>0
+    });
+    if (kidsTies.length>=2) {
+      setTb({active:true, group:'kids', ids:kidsTies, round:0, idx:0, pitch:0});
+      return;
+    }
+    if (adultsTies.length>=2) {
+      setTb({active:true, group:'adults', ids:adultsTies, round:0, idx:0, pitch:0});
+      return;
+    }
+  }
 
   function recordTb(id:string, round:number, pitch:number, mark:Pitch){ setPlayers(prev=>prev.map(p=>{ if(p.id!==id) return p; const tb = p.tb.map(r=>[...r]); while(tb.length<=round) tb.push([]); const prevMark = tb[round][pitch]||''; tb[round][pitch]=mark; return {...p, tb}; })); setHistory(h=>[{op:'pitch', scope:'tb', id, round, pitch, mark}, ...h]); }
 
@@ -379,9 +401,22 @@ export default function HomeRunDerby() {
       const still = tb.ids.filter(pid => lightningScores.get(pid) === topVal);
       
       if (still.length === 1) {
-        // We have a winner!
-        setTb({active:false, ids:[], round:0, idx:0, pitch:0});
-        setEnded(true);
+        // We have a winner for this group!
+        const group = tb.group || 'adults';
+        setTb({active:false, group:null, ids:[], round:0, idx:0, pitch:0});
+        setEndedByGroup(prev => ({...prev, [group]: true}));
+        // If the other group still has a tie to resolve, start it now
+        const otherGroup: Group = group==='kids' ? 'adults' : 'kids';
+        const otherArr = byGroup[otherGroup];
+        const computeTies = (arr: Player[]) => {
+          if (!arr.length) return [] as string[];
+          const max = Math.max(...arr.map(p=>scores.get(p.id)||0));
+          return arr.filter(p => (scores.get(p.id)||0)===max).map(p=>p.id);
+        };
+        const ties = computeTies(otherArr);
+        if (ties.length>=2 && !endedByGroup[otherGroup]) {
+          setTb({active:true, group:otherGroup, ids:ties, round:0, idx:0, pitch:0});
+        }
         return;
       }
       
@@ -393,14 +428,16 @@ export default function HomeRunDerby() {
     setTb({...tb, idx: nextIdx, round: nextRound});
   }
 
-  function reset(){ if(!confirm('Reset all scores and players?')) return; setPlayers([]); setLocked(false); setEnded(false); setHistory([]); setTb({active:false, ids:[], round:0, idx:0, pitch:0}); }
+  function reset(){ if(!confirm('Reset all scores and players?')) return; setPlayers([]); setLocked(false); setEndedByGroup({kids:false, adults:false}); setHistory([]); setTb({active:false, group:null, ids:[], round:0, idx:0, pitch:0}); }
 
-  function share(){ const data={players, locked, ended, tb}; const encoded=btoa(JSON.stringify(data)); navigator.clipboard.writeText(`${location.origin}${location.pathname}#hrd=${encoded}`); }
+  function share(){ const data={players, locked, endedByGroup, tb}; const encoded=btoa(JSON.stringify(data)); navigator.clipboard.writeText(`${location.origin}${location.pathname}#hrd=${encoded}`); }
 
-  useEffect(()=>{ const key="#hrd="; if(location.hash.startsWith(key)){ try{ const d=JSON.parse(atob(location.hash.slice(key.length))); if(d.players) setPlayers(d.players); if(typeof d.locked==='boolean') setLocked(d.locked); if(typeof d.ended==='boolean') setEnded(d.ended); if(d.tb) setTb(d.tb); } catch {} } },[]);
+  useEffect(()=>{ const key="#hrd="; if(location.hash.startsWith(key)){ try{ const d=JSON.parse(atob(location.hash.slice(key.length))); if(d.players) setPlayers(d.players); if(typeof d.locked==='boolean') setLocked(d.locked); if(d.endedByGroup) setEndedByGroup(d.endedByGroup); if(d.tb) setTb(d.tb.group? d.tb : {active:false, group:null, ids:[], round:0, idx:0, pitch:0}); } catch {} } },[]);
 
   function short(n:string){ const parts=n.trim().split(/\s+/); if(parts.length===1) return parts[0]; const last=parts[parts.length-1]; return `${parts[0]} ${last.charAt(0).toUpperCase()}.`; }
 
+
+  const endedAll = endedByGroup.kids && endedByGroup.adults;
 
   return (
     <div style={{minHeight: '100vh', backgroundColor: '#1a1a1a', color: '#fff', padding: '10px', fontFamily: 'Arial, sans-serif'}}>
@@ -572,7 +609,7 @@ export default function HomeRunDerby() {
                           {p.main.map((m, i)=> (
                             <button 
                               key={i} 
-                              onClick={()=>!locked && !tb.active && !ended && handleClick(p.id,i, false)} 
+                              onClick={()=>!locked && !tb.active && !endedAll && handleClick(p.id,i, false)} 
                               title={`Pitch ${i+1} - Double-click for home run sound`}
                               style={{
                                 aspectRatio: '1',
@@ -581,8 +618,8 @@ export default function HomeRunDerby() {
                                 borderRadius: '6px',
                                 backgroundColor: m==='hr' ? '#047857' : m==='x' ? '#be123c' : '#444',
                                 color: '#fff',
-                                cursor: (locked||tb.active||ended) ? 'not-allowed' : 'pointer',
-                                opacity: (locked||tb.active||ended) ? 0.6 : 1,
+                                cursor: (locked||tb.active||endedAll) ? 'not-allowed' : 'pointer',
+                                opacity: (locked||tb.active||endedAll) ? 0.6 : 1,
                                 fontSize: '0.9rem',
                                 fontWeight: 'bold',
                                 touchAction: 'manipulation'
@@ -639,12 +676,12 @@ export default function HomeRunDerby() {
         ))}
 
         <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px'}}>
-          {!ended && !tb.active && (
+          {!endedAll && !tb.active && (
             <button onClick={endMainRound} disabled={!players.length} style={{padding: '10px 20px', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '4px', cursor: !players.length ? 'not-allowed' : 'pointer'}}>End Main Round</button>
           )}
         </div>
 
-        {ended && (
+        {endedAll && (
           <div style={{display:'grid', gap:'12px'}}>
             {(['kids','adults'] as const).map(group => (
               <div key={`win-${group}`} style={{backgroundColor: '#451a03', border: '1px solid #b45309', borderRadius: '8px', padding: '20px'}}>
