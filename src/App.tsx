@@ -324,27 +324,18 @@ export default function HomeRunDerby() {
     setHistory(h=>[{op:'pitch', scope:'main', id, idx}, ...h]); 
   }
 
-  function endMainRound(){
+  function endMainRoundFor(group: Group){
+    // Lock roster on first group end
     setLocked(true);
-    const computeTies = (arr: Player[]) => {
-      if (!arr.length) return [] as string[];
-      const max = Math.max(...arr.map(p=>scores.get(p.id)||0));
-      return arr.filter(p => (scores.get(p.id)||0)===max).map(p=>p.id);
-    };
-    const kidsTies = computeTies(byGroup.kids);
-    const adultsTies = computeTies(byGroup.adults);
-    setEndedByGroup({
-      kids: kidsTies.length<=1 && byGroup.kids.length>0,
-      adults: adultsTies.length<=1 && byGroup.adults.length>0
-    });
-    if (kidsTies.length>=2) {
-      setTb({active:true, group:'kids', ids:kidsTies, round:0, idx:0, pitch:0});
+    const arr = byGroup[group];
+    if (!arr.length) return;
+    const max = Math.max(...arr.map(p=>scores.get(p.id)||0));
+    const ties = arr.filter(p => (scores.get(p.id)||0)===max).map(p=>p.id);
+    if (ties.length >= 2) {
+      setTb({active:true, group, ids:ties, round:0, idx:0, pitch:0});
       return;
     }
-    if (adultsTies.length>=2) {
-      setTb({active:true, group:'adults', ids:adultsTies, round:0, idx:0, pitch:0});
-      return;
-    }
+    setEndedByGroup(prev => ({...prev, [group]: true}));
   }
 
   function recordTb(id:string, round:number, pitch:number, mark:Pitch){ setPlayers(prev=>prev.map(p=>{ if(p.id!==id) return p; const tb = p.tb.map(r=>[...r]); while(tb.length<=round) tb.push([]); const prevMark = tb[round][pitch]||''; tb[round][pitch]=mark; return {...p, tb}; })); setHistory(h=>[{op:'pitch', scope:'tb', id, round, pitch, mark}, ...h]); }
@@ -677,7 +668,10 @@ export default function HomeRunDerby() {
 
         <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px'}}>
           {!endedAll && !tb.active && (
-            <button onClick={endMainRound} disabled={!players.length} style={{padding: '10px 20px', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '4px', cursor: !players.length ? 'not-allowed' : 'pointer'}}>End Main Round</button>
+            <>
+              <button onClick={()=>endMainRoundFor('kids')} disabled={byGroup.kids.length===0} style={{padding: '10px 20px', backgroundColor: byGroup.kids.length? '#059669':'#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: byGroup.kids.length? 'pointer':'not-allowed'}}>End Kids Main Round</button>
+              <button onClick={()=>endMainRoundFor('adults')} disabled={byGroup.adults.length===0} style={{padding: '10px 20px', backgroundColor: byGroup.adults.length? '#059669':'#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: byGroup.adults.length? 'pointer':'not-allowed'}}>End Adults Main Round</button>
+            </>
           )}
         </div>
 
