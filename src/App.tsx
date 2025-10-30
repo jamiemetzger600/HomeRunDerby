@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 
 export default function HomeRunDerby() {
   type Pitch = '' | 'x' | 'hr';
-  type Player = { id: string; name: string; main: Pitch[]; tb: Pitch[][] };
+  type Group = 'kids' | 'adults';
+  type Player = { id: string; name: string; age?: number; group: Group; main: Pitch[]; tb: Pitch[][] };
 
   // Sound effects using MP3 file with fallback
   const playSound = (type: 'hr' | 'miss') => {
@@ -168,9 +169,20 @@ export default function HomeRunDerby() {
   };
 
   const [players, setPlayers] = useState<Player[]>(() => {
-    try { const raw = localStorage.getItem('hrd_players_v2'); return raw? JSON.parse(raw): []; } catch { return []; }
+    try {
+      // Prefer v3 (with groups). Fallback to v2 -> migrate to adults by default
+      const rawV3 = localStorage.getItem('hrd_players_v3');
+      if (rawV3) return JSON.parse(rawV3);
+      const rawV2 = localStorage.getItem('hrd_players_v2');
+      if (rawV2) {
+        const old = JSON.parse(rawV2) as Array<any>;
+        return old.map(o => ({ id: o.id, name: o.name, main: o.main, tb: o.tb, group: 'adults' as Group }));
+      }
+      return [];
+    } catch { return []; }
   });
   const [name, setName] = useState('');
+  const [age, setAge] = useState<string>('');
   const [locked, setLocked] = useState<boolean>(() => { try { return JSON.parse(localStorage.getItem('hrd_locked_v2')||'false'); } catch { return false; } });
   const [ended, setEnded] = useState<boolean>(() => { try { return JSON.parse(localStorage.getItem('hrd_ended_v2')||'false'); } catch { return false; } });
   const [history, setHistory] = useState<any[]>([]);
@@ -178,15 +190,27 @@ export default function HomeRunDerby() {
   const [pitchCount, setPitchCount] = useState<number>(() => { try { return JSON.parse(localStorage.getItem('hrd_pitch_count_v2')||'6'); } catch { return 6; } });
   const [audioEnabled, setAudioEnabled] = useState(false);
 
-  useEffect(()=>localStorage.setItem('hrd_players_v2', JSON.stringify(players)),[players]);
+  useEffect(()=>localStorage.setItem('hrd_players_v3', JSON.stringify(players)),[players]);
   useEffect(()=>localStorage.setItem('hrd_locked_v2', JSON.stringify(locked)),[locked]);
   useEffect(()=>localStorage.setItem('hrd_ended_v2', JSON.stringify(ended)),[ended]);
   useEffect(()=>localStorage.setItem('hrd_pitch_count_v2', JSON.stringify(pitchCount)),[pitchCount]);
 
   const scores = useMemo(()=> new Map(players.map(p=>[p.id, (p.main.filter(m=>m==='hr').length + p.tb.flat().filter(m=>m==='hr').length)])),[players]);
-  const maxHr = useMemo(()=> players.length? Math.max(...players.map(p=>scores.get(p.id) || 0)) : 0,[players, scores]);
-  const leaders = useMemo(()=> players.filter(p=> (scores.get(p.id)||0)===maxHr && maxHr>0),[players, maxHr, scores]);
-  const top3 = useMemo(()=> [...players].sort((a,b)=> (scores.get(b.id)||0) - (scores.get(a.id)||0) || a.name.localeCompare(b.name)).slice(0,3),[players, scores]);
+  const byGroup = useMemo(() => ({
+    kids: players.filter(p=>p.group==='kids'),
+    adults: players.filter(p=>p.group==='adults')
+  }), [players]);
+  const top3ByGroup = useMemo(() => {
+    const rank = (arr: Player[]) => [...arr].sort((a,b)=> (scores.get(b.id)||0) - (scores.get(a.id)||0) || a.name.localeCompare(b.name)).slice(0,3);
+    return { kids: rank(byGroup.kids), adults: rank(byGroup.adults) };
+  }, [byGroup, scores]);
+  const leadersByGroup = useMemo(() => {
+    const make = (arr: Player[]) => {
+      const max = arr.length ? Math.max(...arr.map(p=>scores.get(p.id)||0)) : 0;
+      return { max, leaders: arr.filter(p => (scores.get(p.id)||0)===max && max>0) };
+    };
+    return { kids: make(byGroup.kids), adults: make(byGroup.adults) };
+  }, [byGroup, scores]);
 
   const blankPitches = () => Array.from({length:pitchCount},()=>'' as Pitch);
 
@@ -213,8 +237,11 @@ export default function HomeRunDerby() {
 
   function addPlayer(){
     const n = name.trim(); if(!n) return;
-    const p: Player = { id: crypto.randomUUID(), name: n, main: blankPitches(), tb: [] };
-    setPlayers(v=>[...v, p]); setHistory(h=>[{op:'add', p}, ...h]); setName('');
+    const parsedAge = age.trim() ? parseInt(age.trim(), 10) : undefined;
+    if (parsedAge !== undefined && (isNaN(parsedAge) || parsedAge < 0 || parsedAge > 120)) return;
+    const group: Group = parsedAge !== undefined && parsedAge >= 10 && parsedAge <= 18 ? 'kids' : 'adults';
+    const p: Player = { id: crypto.randomUUID(), name: n, age: parsedAge, group, main: blankPitches(), tb: [] };
+    setPlayers(v=>[...v, p]); setHistory(h=>[{op:'add', p}, ...h]); setName(''); setAge('');
   }
 
   function undo(){ 
@@ -412,47 +439,56 @@ export default function HomeRunDerby() {
               disabled={locked}
               style={{flex: 1, minWidth: '200px', padding: '10px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px'}}
             />
+            <input
+              placeholder="Age (optional)"
+              value={age}
+              onChange={e=>setAge(e.target.value.replace(/[^0-9]/g,''))}
+              onKeyDown={e=>{ if(e.key==='Enter') addPlayer(); }}
+              disabled={locked}
+              style={{width: '120px', padding: '10px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px'}}
+            />
             <button onClick={addPlayer} disabled={locked || !name.trim()} style={{padding: '10px 20px', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '4px', cursor: (locked || !name.trim()) ? 'not-allowed' : 'pointer'}}>Add</button>
             <button onClick={()=>setLocked(v=>!v)} style={{padding: '10px 20px', backgroundColor: locked ? '#059669' : '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer'}}>{locked ? 'Unlock' : 'Lock Roster'}</button>
           </div>
         </div>
 
-        <div style={{backgroundColor: '#2a2a2a', border: '1px solid #444', borderRadius: '8px', padding: '20px', marginBottom: '20px'}}>
-          <h2 style={{marginTop: 0, marginBottom: '15px'}}>Current Top 3</h2>
-          {players.length === 0 ? (
-            <p style={{color: '#999'}}>No players yet.</p>
-          ) : (
-            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px'}}>
-              {top3.map((p,i)=> (
-                <div key={p.id} style={{backgroundColor: '#333', border: '1px solid #555', borderRadius: '8px', padding: '15px', textAlign: 'center'}}>
-                  <div style={{fontSize: '0.8rem', color: '#999', textTransform: 'uppercase'}}>{i===0?'1st':i===1?'2nd':'3rd'}</div>
-                  <div style={{fontWeight: 'bold', margin: '5px 0'}}>{short(p.name)}</div>
-                  <div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>{scores.get(p.id)||0}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{backgroundColor: '#2a2a2a', border: '1px solid #444', borderRadius: '8px', padding: '20px', marginBottom: '20px'}}>
-          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-            <h2 style={{margin: 0}}>Leaderboard</h2>
-            {ended ? (
-              <div style={{color: '#10b981', fontWeight: 'bold'}}>🏆 Winner{leaders.length>1?'s':''} crowned</div>
-            ) : tb.active ? (
-              <div style={{color: '#f59e0b', fontWeight: 'bold'}}>⚡ Lightning round {tb.round + 1} (3 pitches each)</div>
+        {(['kids','adults'] as const).map(group => (
+          <div key={group} style={{backgroundColor: '#2a2a2a', border: '1px solid #444', borderRadius: '8px', padding: '20px', marginBottom: '20px'}}>
+            <h2 style={{marginTop: 0, marginBottom: '15px'}}>Current Top 3 - {group==='kids'?'Kids (10–18)':'Adults (18+)'}</h2>
+            {byGroup[group].length === 0 ? (
+              <p style={{color: '#999'}}>No players in this group.</p>
             ) : (
-              <div style={{color: '#999', fontSize: '0.9rem'}}>Mark each of {pitchCount} pitches: click to cycle ☐ → ✗ → HR</div>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px'}}>
+                {top3ByGroup[group].map((p,i)=> (
+                  <div key={p.id} style={{backgroundColor: '#333', border: '1px solid #555', borderRadius: '8px', padding: '15px', textAlign: 'center'}}>
+                    <div style={{fontSize: '0.8rem', color: '#999', textTransform: 'uppercase'}}>{i===0?'1st':i===1?'2nd':'3rd'}</div>
+                    <div style={{fontWeight: 'bold', margin: '5px 0'}}>{short(p.name)}{p.age!==undefined?` (${p.age})`:''}</div>
+                    <div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>{scores.get(p.id)||0}</div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-          
-          {players.length === 0 ? (
-            <p style={{color: '#999'}}>No players yet.</p>
-          ) : (
-            <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
-              {(() => {
-                // Sort players to put active lightning round player first
-                const sortedPlayers = [...players];
+        ))}
+
+        {(['kids','adults'] as const).map(group => (
+          <div key={`lb-${group}`} style={{backgroundColor: '#2a2a2a', border: '1px solid #444', borderRadius: '8px', padding: '20px', marginBottom: '20px'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+              <h2 style={{margin: 0}}>Leaderboard - {group==='kids'?'Kids':'Adults'}</h2>
+              {tb.active ? (
+                <div style={{color: '#f59e0b', fontWeight: 'bold'}}>⚡ Lightning round {tb.round + 1} (3 pitches each)</div>
+              ) : (
+                <div style={{color: '#999', fontSize: '0.9rem'}}>Mark each of {pitchCount} pitches: click to cycle ☐ → ✗ → HR</div>
+              )}
+            </div>
+            {byGroup[group].length === 0 ? (
+              <p style={{color: '#999'}}>No players in this group.</p>
+            ) : (
+              <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                {(() => {
+                // Sort players to put active lightning round player first, within group
+                const groupPlayers = byGroup[group];
+                const sortedPlayers = [...groupPlayers];
                 if (tb.active && tb.ids[tb.idx]) {
                   const activePlayerId = tb.ids[tb.idx];
                   const activePlayerIndex = sortedPlayers.findIndex(p => p.id === activePlayerId);
@@ -464,20 +500,19 @@ export default function HomeRunDerby() {
                 
                 return sortedPlayers.map((p, idx)=> {
                   const isActiveLightningPlayer = tb.active && p.id === tb.ids[tb.idx];
-                  const displayRank = players.findIndex(player => player.id === p.id) + 1;
+                  const displayRank = groupPlayers.findIndex(player => player.id === p.id) + 1;
                   
                   return (
                     <div key={p.id} style={{
                       backgroundColor: isActiveLightningPlayer ? '#451a03' : '#333', 
-                      border: ended && (scores.get(p.id)||0)===maxHr ? '2px solid #f59e0b' : isActiveLightningPlayer ? '2px solid #fcd34d' : '1px solid #555', 
+                      border: isActiveLightningPlayer ? '2px solid #fcd34d' : '1px solid #555', 
                       borderRadius: '8px', 
                       padding: '15px'
                     }}>
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
                         <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                          {(ended && (scores.get(p.id)||0)===maxHr) && <span>🏆</span>}
                           {isActiveLightningPlayer && <span>⚡</span>}
-                          <span style={{fontWeight: 'bold'}}>{displayRank}. {p.name}</span>
+                          <span style={{fontWeight: 'bold'}}>{displayRank}. {p.name}{p.age!==undefined?` (${p.age})`:''}</span>
                           {isActiveLightningPlayer && <span style={{color: '#fcd34d', fontSize: '0.8rem'}}>(Lightning Round)</span>}
                         </div>
                         <div style={{fontSize: '1.2rem', fontWeight: 'bold'}}>{scores.get(p.id)||0}</div>
@@ -598,9 +633,10 @@ export default function HomeRunDerby() {
                   );
                 });
               })()}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
+        ))}
 
         <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px'}}>
           {!ended && !tb.active && (
@@ -609,9 +645,17 @@ export default function HomeRunDerby() {
         </div>
 
         {ended && (
-          <div style={{backgroundColor: '#451a03', border: '1px solid #b45309', borderRadius: '8px', padding: '20px'}}>
-            <h2 style={{marginTop: 0, marginBottom: '5px'}}>Winner{leaders.length>1?'s':''}</h2>
-            <p style={{margin: 0}}>{leaders.map(l=>l.name).join(', ')} with {maxHr} HR{maxHr===1?'':'s'}.</p>
+          <div style={{display:'grid', gap:'12px'}}>
+            {(['kids','adults'] as const).map(group => (
+              <div key={`win-${group}`} style={{backgroundColor: '#451a03', border: '1px solid #b45309', borderRadius: '8px', padding: '20px'}}>
+                <h2 style={{marginTop: 0, marginBottom: '5px'}}>{group==='kids'?'Kids':'Adults'} Winner{leadersByGroup[group].leaders.length>1?'s':''}</h2>
+                {leadersByGroup[group].leaders.length===0 ? (
+                  <p style={{margin: 0}}>No winners in this group.</p>
+                ) : (
+                  <p style={{margin: 0}}>{leadersByGroup[group].leaders.map(l=>l.name).join(', ')} with {leadersByGroup[group].max} HR{leadersByGroup[group].max===1?'':'s'}.</p>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
