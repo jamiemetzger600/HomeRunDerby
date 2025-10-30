@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 
 export default function HomeRunDerby() {
   type Pitch = '' | 'x' | 'hr';
@@ -183,6 +183,7 @@ export default function HomeRunDerby() {
   });
   const [name, setName] = useState('');
   const [age, setAge] = useState<string>('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [locked, setLocked] = useState<boolean>(() => { try { return JSON.parse(localStorage.getItem('hrd_locked_v3')||'false'); } catch { return false; } });
   const [endedByGroup, setEndedByGroup] = useState<{kids:boolean; adults:boolean}>(() => { try { return JSON.parse(localStorage.getItem('hrd_ended_v3')||'{"kids":false,"adults":false}'); } catch { return {kids:false, adults:false}; } });
   const [history, setHistory] = useState<any[]>([]);
@@ -242,6 +243,8 @@ export default function HomeRunDerby() {
     const group: Group = parsedAge !== undefined && parsedAge >= 10 && parsedAge <= 18 ? 'kids' : 'adults';
     const p: Player = { id: crypto.randomUUID(), name: n, age: parsedAge, group, main: blankPitches(), tb: [] };
     setPlayers(v=>[...v, p]); setHistory(h=>[{op:'add', p}, ...h]); setName(''); setAge('');
+    // Focus back to name input
+    setTimeout(() => nameInputRef.current?.focus(), 0);
   }
 
   function undo(){ 
@@ -484,6 +487,7 @@ export default function HomeRunDerby() {
           <h3 style={{marginTop: 0, marginBottom: '15px'}}>Add Players</h3>
           <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
             <input
+              ref={nameInputRef}
               placeholder="Player name"
               value={name}
               onChange={e=>setName(e.target.value)}
